@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/logo_1_1.PNG" alt="nWiiURecomp" width="250"/>
+  <img src="image/logo_wide.jpg" alt="NWiiRecomp" width="700"/>
 </p>
 
 <p align="center">
@@ -45,13 +45,16 @@ nWiiURecomp/
 ## What Works
 
 ### Analyzer (`nWiiUAnalyzer`)
+
 - RPX section parsing.
 - Disassembly and function boundary discovery.
 
 ### Recompiler (`nWiiURecomp`)
+
 - Translates PowerPC 750CL instructions to C++.
 - Tail-call detection and `goto`-based local branch inlining.
 
 ### Runtime (`nWiiURuntime`)
+
 - **Cafe OS**: Initial RPX loading, ELF parsing.
 - **Latte GPU**: PM4 packet handling stub.

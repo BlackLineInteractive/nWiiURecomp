@@ -44,5 +44,4 @@ log.txt
 *.csv
 *.ini
 *.txt
-*.png
 *.log
