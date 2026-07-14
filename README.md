@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="image/logo_wide.jpg" alt="NWiiRecomp" width="700"/>
+  <img src="image/logo_wide.jpeg" alt="NWiiRecomp" width="700"/>
 </p>
 
 <p align="center">
