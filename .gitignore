@@ -1,0 +1,48 @@
+# Build directories
+build/
+export/
+test_export/
+out/
+bin/
+export_gc/
+export_gc_mp7/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# User-specific testing paths
+NO_GitHub/
+*.dol
+*.iso
+*.wbfs
+
+NWii-documentation/
+
+docs/
+.*/
+!.github/
+
+# CMake
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+log.txt
+
+# Configuration files
+*.toml
+*.csv
+*.ini
+*.txt
+*.png
+*.log

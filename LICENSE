@@ -1,0 +1,72 @@
+Custom License (Modified MIT with Commercial Restrictions)
+
+Copyright (c) 2026 Volodymyr Vovchok (BlackLine Interactive)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, strictly subject to the following conditions:
+
+1. DEFINITIONS
+   "Software" refers to the source code, object code, binary executables,
+   assets, and accompanying documentation provided under this License.
+   "Derivative Work" means any software, project, or product that incorporates,
+   modifies, links against, or is based upon the Software.
+   "Commercial Use" means any use, distribution, or offering of the Software
+   or a Derivative Work intended for or directed toward commercial advantage,
+   financial gain, or monetary compensation, including but not limited to:
+   selling copies, offering paid services/subscriptions (e.g., Patreon),
+   including it in a commercial product, or displaying advertisements.
+
+2. NON-COMMERCIAL USE ONLY
+   You may use, copy, modify, merge, publish, and distribute copies of the
+   Software and Derivative Works exclusively for personal, educational, or
+   non-commercial purposes, provided you comply with all terms herein.
+
+3. COMMERCIAL USE & ROYALTIES
+   Any Commercial Use of the Software or any Derivative Work is STRICTLY
+   PROHIBITED unless explicitly authorized by a separate, prior written 
+   agreement executed directly with the copyright holder. Any such commercial
+   exploitation without an agreement constitutes copyright infringement. Authorized
+   commercial use will generally require a signed contract specifying a royalty
+   fee or percentage (%) of gross revenue to be paid to the author.
+
+4. ATTRIBUTION & NOTICES
+   The above copyright notice, this permission notice, and a clear, visible
+   credit to the original author (Volodymyr Vovchok / BlackLine Interactive)
+   must be included in all copies, substantial portions, and Derivative Works
+   of the Software. If the Software is distributed in compiled form, this notice
+   must be included in the documentation or "About" section.
+
+5. RESTRICTIONS ON DISTRIBUTION
+   You may not distribute the Software or any Derivative Work under terms that
+   are less restrictive than those contained in this License. You may not
+   impose any further restrictions on the exercise of the rights granted or
+   affirmed under this License.
+
+6. PROHIBITION OF AI TRAINING
+   The use of this Software or its source code to train, fine-tune, or otherwise
+   develop machine learning models or artificial intelligence systems is
+   strictly prohibited without prior written consent from the copyright holder.
+
+7. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE ENTIRE
+   RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH YOU.
+
+8. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR CONTRIBUTORS BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+   OR THE USE OR OTHER DEALINGS IN THE SOFTWARE, EVEN IF ADVISED OF THE 
+   POSSIBILITY OF SUCH DAMAGE. THIS INCLUDES DIRECT, INDIRECT, INCIDENTAL, 
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING PROCUREMENT OF 
+   SUBSTITUTE GOODS/SERVICES, LOSS OF USE, DATA, OR PROFITS, OR BUSINESS 
+   INTERRUPTION).
+
+9. SEVERABILITY
+   If any provision of this License is held to be invalid or unenforceable, such
+   provision shall be struck and the remaining provisions shall be enforced to
+   the fullest extent under law.
