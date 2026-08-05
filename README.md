@@ -29,6 +29,8 @@ nWiiURecomp translates Nintendo Wii U (`.rpx`, `.rpl`) executables into native C
 > **Note on Our Approach:** Unlike some recompilation projects that rely heavily on shader generation or existing emulator pipelines, nWiiURecomp translates the original PowerPC machine code statically and builds upon a customized, checked Cafe OS runtime to provide the native execution environment.
 
 > **Latest Update:** The current milestone authenticates the Wind Waker HD EU v0 executable, maps its sections and relocations, initializes Cafe ABI state, and runs deterministically through cooperative startup. The static recompiler is achieving near-native speeds natively alongside a standalone headless runner or Cemu-derived windowed host.
+> 
+> **Note on Universality:** While currently hardcoded to Wind Waker HD for testing, the codebase is actively being refactored and will eventually be **unified to support all Wii U games** universally using a configuration-driven approach.
 
 ---
 
