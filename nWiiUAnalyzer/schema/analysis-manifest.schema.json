@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nwiiu.dev/schema/analysis-manifest.schema.json",
+  "title": "nWiiU RPX analysis manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "sections",
+    "imports",
+    "exports",
+    "relocations",
+    "functions",
+    "unresolved",
+    "summary"
+  ],
+  "properties": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_code",
+        "title_id",
+        "title_version",
+        "executable_format",
+        "architecture",
+        "elf_class",
+        "endianness",
+        "abi",
+        "sha256",
+        "entry_point",
+        "input_size"
+      ],
+      "properties": {
+        "product_code": { "type": "string" },
+        "title_id": { "type": "string" },
+        "title_version": { "type": "integer", "minimum": 0 },
+        "executable_format": { "const": "RPX" },
+        "architecture": { "const": "PowerPC" },
+        "elf_class": { "const": "ELF32" },
+        "endianness": { "const": "big" },
+        "abi": { "const": "Cafe OS" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "entry_point": { "$ref": "#/$defs/address" },
+        "input_size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "functions", "data"],
+        "properties": {
+          "name": { "type": "string" },
+          "functions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/symbol" }
+          },
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/symbol" }
+          }
+        }
+      }
+    },
+    "exports": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/export" }
+    },
+    "relocations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relocation" }
+    },
+    "functions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/function" }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unresolved" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_count",
+        "import_count",
+        "export_count",
+        "relocation_count",
+        "function_count",
+        "unresolved_count"
+      ],
+      "properties": {
+        "section_count": { "type": "integer", "minimum": 0 },
+        "import_count": { "type": "integer", "minimum": 0 },
+        "export_count": { "type": "integer", "minimum": 0 },
+        "relocation_count": { "type": "integer", "minimum": 0 },
+        "function_count": { "type": "integer", "minimum": 0 },
+        "unresolved_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9A-F]{8}$"
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "type",
+        "flags",
+        "address",
+        "stored_size",
+        "decompressed_size",
+        "link",
+        "info",
+        "alignment",
+        "entry_size"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "type": { "type": "integer", "minimum": 0 },
+        "flags": { "type": "integer", "minimum": 0 },
+        "address": { "$ref": "#/$defs/address" },
+        "stored_size": { "type": "integer", "minimum": 0 },
+        "decompressed_size": { "type": "integer", "minimum": 0 },
+        "link": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 },
+        "alignment": { "type": "integer", "minimum": 0 },
+        "entry_size": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "address",
+        "size",
+        "info",
+        "other",
+        "section_index"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "address": { "$ref": "#/$defs/address" },
+        "size": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 },
+        "other": { "type": "integer", "minimum": 0 },
+        "section_index": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "kind",
+        "address",
+        "size",
+        "info",
+        "other",
+        "section_index"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "kind": {
+          "enum": [
+            "notype",
+            "object",
+            "function",
+            "section",
+            "file",
+            "common",
+            "tls",
+            "os_specific",
+            "processor_specific",
+            "unknown"
+          ]
+        },
+        "address": { "$ref": "#/$defs/address" },
+        "size": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 },
+        "other": { "type": "integer", "minimum": 0 },
+        "section_index": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "relocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_section_index",
+        "source_address",
+        "type",
+        "symbol",
+        "addend",
+        "target_address"
+      ],
+      "properties": {
+        "source_section_index": { "type": "integer", "minimum": 0 },
+        "source_address": { "$ref": "#/$defs/address" },
+        "type": { "type": "integer", "minimum": 0 },
+        "symbol": { "$ref": "#/$defs/symbol" },
+        "addend": { "type": "integer" },
+        "target_address": {
+          "oneOf": [
+            { "$ref": "#/$defs/address" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "instruction_count",
+        "callers",
+        "callees",
+        "jump_table_targets",
+        "discovery_reasons",
+        "dynamic_transfers"
+      ],
+      "properties": {
+        "start": { "$ref": "#/$defs/address" },
+        "end": { "$ref": "#/$defs/address" },
+        "instruction_count": { "type": "integer", "minimum": 0 },
+        "callers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/address" }
+        },
+        "callees": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/address" }
+        },
+        "jump_table_targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/address" }
+        },
+        "discovery_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dynamic_transfers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dynamicTransfer" }
+        }
+      }
+    },
+    "dynamicTransfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "kind"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "kind": { "type": "string" }
+      }
+    },
+    "unresolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "category", "reason"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "category": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

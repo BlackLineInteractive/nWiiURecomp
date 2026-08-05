@@ -43,5 +43,4 @@ log.txt
 *.toml
 *.csv
 *.ini
-*.txt
 *.log
