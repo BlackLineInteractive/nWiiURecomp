@@ -4,8 +4,9 @@ export/
 test_export/
 out/
 bin/
-export_gc/
-export_gc_mp7/
+export/
+extern/
+
 
 # IDE files
 .vscode/
@@ -61,7 +62,7 @@ log.txt
 # profiles under configs/ are the source of truth for what each target is —
 # they have to be committed.
 *.toml
-!configs/*.toml
+!configs/
 *.csv
 *.ini
 *.log

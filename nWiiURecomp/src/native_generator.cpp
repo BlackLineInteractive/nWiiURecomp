@@ -375,7 +375,7 @@ void validate_instruction(const PpcInstruction& instruction) {
         if (instruction.rc()) {
             break;
         }
-        if ((instruction.xo5() == 18 || instruction.xo5() == 20 ||
+        if ((instruction.xo5() == 20 ||
              instruction.xo5() == 21) &&
             instruction.frc() == 0) {
             return;
