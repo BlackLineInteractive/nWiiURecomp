@@ -8,65 +8,11 @@
 #include <utility>
 
 namespace nwii::runtime {
-namespace {
-// WWHD's SZS decompressor at 0x0275F480 decodes Yaz0 streams one byte at a
-// time; interpreting it costs billions of guest instructions per boot. This
-// native replacement mirrors the guest semantics exactly: r3 = destination,
-// r4 = Yaz0 stream with the decoded size at +0x04 and payload at +0x10.
-// Returns the decoded size in r3. When a back-reference would overrun the
-// remaining output budget the guest exits without copying it; so do we.
-constexpr uint32_t kWwhdYaz0Decode = 0x0275F480;
-
-void wwhd_yaz0_decode(CPUContext& cpu, GuestMemory& memory) {
-    if (std::getenv("NWIIU_YAZ0_TRACE") != nullptr) {
-        std::fprintf(stderr, "YAZ0-HLE dst=%08X src=%08X\n", cpu.gpr[3],
-                     cpu.gpr[4]);
-    }
-    const uint32_t pc = cpu.pc;
-    uint32_t dst = cpu.gpr[3];
-    uint32_t src = cpu.gpr[4];
-    const uint32_t size = memory.read32(src + 4, pc);
-    src += 0x10;
-    int64_t remaining = size;
-    uint32_t flags = 0;
-    uint32_t flag_bits = 0;
-    while (remaining > 0) {
-        if (flag_bits == 0) {
-            flags = memory.read8(src++, pc);
-            flag_bits = 8;
-        }
-        if ((flags & 0x80u) != 0) {
-            memory.write8(dst++, memory.read8(src++, pc), pc);
-            --remaining;
-        } else {
-            const uint32_t first = memory.read8(src++, pc);
-            const uint32_t second = memory.read8(src++, pc);
-            const uint32_t distance = (((first & 0x0Fu) << 8) | second) + 1;
-            uint32_t length = first >> 4;
-            if (length == 0) {
-                length = memory.read8(src++, pc) + 0x10u;
-            }
-            length += 2;
-            remaining -= length;
-            if (remaining < 0) {
-                break;
-            }
-            for (uint32_t index = 0; index < length; ++index, ++dst) {
-                memory.write8(dst, memory.read8(dst - distance, pc), pc);
-            }
-        }
-        flags <<= 1;
-        --flag_bits;
-    }
-    cpu.gpr[3] = size;
-    cpu.instruction_count += 32 + size / 8;
-    cpu.pc = cpu.lr;
-}
-} // namespace
 
 Machine::Machine(ExecutionImage& image, std::filesystem::path title_root,
                  std::optional<std::filesystem::path> save_root,
-                 std::optional<std::filesystem::path> shared_font)
+                 std::optional<std::filesystem::path> shared_font,
+                 const std::map<uint32_t, std::string>& hle_hooks)
     : image_(image), coreinit_(image, std::move(shared_font)),
       filesystem_(image, std::move(title_root), std::move(save_root)),
       olv_(image), cafe_runtime_(image), executor_(image) {
@@ -76,7 +22,13 @@ Machine::Machine(ExecutionImage& image, std::filesystem::path title_root,
     filesystem_.register_handlers(cafe_runtime_);
     olv_.register_handlers(cafe_runtime_);
     cafe_runtime_.register_imports(executor_);
-    executor_.register_patch(kWwhdYaz0Decode, &wwhd_yaz0_decode);
+    for (const auto& [address, name] : hle_hooks) {
+        const NativeThunk thunk = find_native_hook(name);
+        if (thunk == nullptr) {
+            throw std::runtime_error("unknown HLE hook '" + name + "'");
+        }
+        executor_.register_patch(address, thunk);
+    }
 
     CPUContext main;
     initialize_cpu(image_, main);

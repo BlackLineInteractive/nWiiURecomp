@@ -15,6 +15,9 @@ struct RunnerOptions {
     std::filesystem::path title_root;
     std::optional<std::filesystem::path> save_root;
     std::optional<std::filesystem::path> shared_font;
+    // Absent means the caller's built-in profile decides. The generated runner
+    // ignores this: its profile is compiled in.
+    std::optional<std::filesystem::path> config;
     uint64_t max_instructions{};
     bool trace{};
     bool window{};

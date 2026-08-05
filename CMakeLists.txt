@@ -12,7 +12,16 @@ enable_testing()
 add_subdirectory(nWiiUAnalyzer)
 add_subdirectory(nWiiURuntime)
 add_subdirectory(nWiiURecomp)
-add_subdirectory(nWiiUStudio)
+
+# Studio clones raylib, ImGui and four more projects at configure time, so a
+# build of the CLIs would otherwise need the network — and recompile_cli_test,
+# which configures this tree from scratch, would pay for it on every run.
+# It is also the only component that does not build today: its sources came
+# from NWiiRecomp and still include that project's headers.
+option(NWIIU_BUILD_STUDIO "Build the nWiiUStudio GUI (needs network at configure time)" OFF)
+if(NWIIU_BUILD_STUDIO)
+    add_subdirectory(nWiiUStudio)
+endif()
 
 if(DEFINED NWIIU_GENERATED_PROGRAM
    AND NOT NWIIU_GENERATED_PROGRAM STREQUAL "")
@@ -28,8 +37,15 @@ if(DEFINED NWIIU_GENERATED_PROGRAM
             "${NWIIU_GENERATED_PROGRAM}")
     endif()
     include("${NWIIU_GENERATED_PROGRAM_CMAKE}")
-    if(NOT TARGET wwhd-native)
+    # The generated targets are named after the profile's target_prefix, so the
+    # name to check for comes from the caller. It defaults to wwhd, which is
+    # what tools/build-wwhd-port.sh and the Cemu patch expect.
+    if(NOT DEFINED NWIIU_GENERATED_PREFIX OR NWIIU_GENERATED_PREFIX STREQUAL "")
+        set(NWIIU_GENERATED_PREFIX wwhd)
+    endif()
+    if(NOT TARGET ${NWIIU_GENERATED_PREFIX}-native)
         message(FATAL_ERROR
-            "generated program.cmake must define target wwhd-native")
+            "generated program.cmake must define target "
+            "${NWIIU_GENERATED_PREFIX}-native")
     endif()
 endif()

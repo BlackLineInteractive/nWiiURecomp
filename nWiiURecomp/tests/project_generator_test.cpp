@@ -27,6 +27,17 @@ using nwiiu::analyzer::RpxImage;
 using nwiiu::analyzer::Section;
 using nwiiu::recomp::generate_native_project;
 
+// The generator now takes its names and gates from a profile.
+// These tests assert the emitted shape, so they use the same
+// prefix the port scripts expect rather than a test-only one.
+nwiiu::analyzer::GameConfig profile() {
+    nwiiu::analyzer::GameConfig config;
+    config.project_name = "Wind Waker HD";
+    config.target_prefix_override = "wwhd";
+    config.target = nwiiu::analyzer::kWwhdEuV0;
+    return config;
+}
+
 constexpr uint32_t kTextAddress = 0x02000000;
 
 void append_be32(std::vector<uint8_t>& bytes, uint32_t word) {
@@ -104,9 +115,9 @@ void test_deterministic_project() {
     const auto second = root / "second";
     std::filesystem::remove_all(root);
 
-    const auto first_summary = generate_native_project(image, analysis, first);
+    const auto first_summary = generate_native_project(image, analysis, first, profile());
     const auto second_summary =
-        generate_native_project(image, analysis, second);
+        generate_native_project(image, analysis, second, profile());
 
     const std::vector<std::filesystem::path> expected_files{
         "block_0000.cpp", "registry.cpp", "main.cpp", "module.cpp",
@@ -249,6 +260,55 @@ void test_deterministic_project() {
     std::filesystem::remove_all(root);
 }
 
+// The point of profiles: a second game gets its own target names, its own
+// title id and its own authentication, with no edit to the tree.
+void test_profile_names_and_gates_reach_the_generated_project() {
+    auto image = make_image({0x60000000});
+    Analysis analysis;
+    add_block(analysis, kTextAddress);
+
+    nwiiu::analyzer::GameConfig config;
+    config.project_name = "Splatoon 2";
+    config.target = {"WUP-P-AAAA",
+                     "00050000101C0000",
+                     0,
+                     "0011223344556677889900aabbccddeeff00112233445566778899aabb",
+                     0x02000000,
+                     "Some Other Game"};
+    config.hle_hooks = {{0x02000000u, "Yaz0Decode"}};
+
+    const auto root = std::filesystem::temp_directory_path() /
+                      "nwiiu_project_generator_profile_test";
+    std::filesystem::remove_all(root);
+    generate_native_project(image, analysis, root, config);
+
+    const auto cmake = read_file(root / "program.cmake");
+    require_contains(cmake, "add_executable(splatoon-2-native",
+                     "the profile names the native executable");
+    require_contains(cmake, "add_library(splatoon-2-module SHARED",
+                     "the profile names the loadable module");
+    require_contains(cmake, "add_library(splatoon-2-recompiled OBJECT",
+                     "the profile names the object library");
+    test::require(cmake.find("wwhd") == std::string::npos,
+                  "no WWHD name survives a different profile");
+
+    const auto module = read_file(root / "module.cpp");
+    require_contains(module, "0x00050000101C0000ULL",
+                     "the module reports the profile's title id");
+
+    const auto runner = read_file(root / "main.cpp");
+    require_contains(runner, "target.product_code = \"WUP-P-AAAA\"",
+                     "the runner authenticates the profile's build");
+    require_contains(runner, "target.entry_point = 0x2000000u",
+                     "the runner pins the profile's entry point");
+    require_contains(runner, "{0x2000000u, \"Yaz0Decode\"}",
+                     "the runner carries the profile's hooks");
+    test::require(runner.find("resolve_target") == std::string::npos,
+                  "the runner no longer reaches for a built-in target");
+
+    std::filesystem::remove_all(root);
+}
+
 void test_branch_override_is_sliced_into_own_block() {
     auto image = make_image({0x48000000, 0x60000000});
     image.relocations.push_back(Relocation{
@@ -261,7 +321,7 @@ void test_branch_override_is_sliced_into_own_block() {
     const auto output = std::filesystem::temp_directory_path() /
                         "nwiiu_project_generator_override_test";
     std::filesystem::remove_all(output);
-    generate_native_project(image, analysis, output);
+    generate_native_project(image, analysis, output, profile());
     const auto shard = read_file(output / "block_0000.cpp");
     require_contains(
         shard,
@@ -290,7 +350,7 @@ void test_strict_diagnostics_preserve_existing_output() {
 
     std::string diagnostic;
     try {
-        generate_native_project(image, analysis, output);
+        generate_native_project(image, analysis, output, profile());
     } catch (const std::runtime_error& error) {
         diagnostic = error.what();
     }
@@ -320,6 +380,7 @@ void test_strict_diagnostics_preserve_existing_output() {
 
 int main() {
     test_deterministic_project();
+    test_profile_names_and_gates_reach_the_generated_project();
     test_branch_override_is_sliced_into_own_block();
     test_strict_diagnostics_preserve_existing_output();
     return 0;

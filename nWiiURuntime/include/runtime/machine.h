@@ -5,23 +5,32 @@
 #include "runtime/cafe_filesystem.h"
 #include "runtime/cafe_runtime.h"
 #include "runtime/executor.h"
+#include "runtime/native_hooks.h"
 
 #include <array>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <ostream>
+#include <string>
 
 namespace nwii::runtime {
 inline constexpr uint64_t kSchedulerQuantum = 10000;
 
 class Machine {
 public:
+    // `hle_hooks` maps a guest address to the name of a native replacement
+    // (see native_hooks.h). It defaults to the WWHD set so that call sites
+    // predating game profiles behave unchanged; an unknown name throws here
+    // rather than quietly never firing.
     explicit Machine(
         ExecutionImage& image, std::filesystem::path title_root = {},
         std::optional<std::filesystem::path> save_root = std::nullopt,
-        std::optional<std::filesystem::path> shared_font = std::nullopt);
+        std::optional<std::filesystem::path> shared_font = std::nullopt,
+        const std::map<uint32_t, std::string>& hle_hooks =
+            default_hle_hooks());
     Machine(const Machine&) = delete;
     Machine& operator=(const Machine&) = delete;
     Machine(Machine&&) = delete;

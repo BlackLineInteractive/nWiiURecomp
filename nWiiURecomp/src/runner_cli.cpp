@@ -50,12 +50,14 @@ RunnerOptions parse_runner_options(std::span<const std::string_view> args) {
     if (args.empty() || args[0].empty()) {
         throw std::invalid_argument(
             "usage: nwiiu-run <input.rpx> --max-instructions <positive> "
-            "[--save-root <dir>] [--shared-font <ttf>] [--trace] [--window]");
+            "[--config <profile.toml>] [--save-root <dir>] "
+            "[--shared-font <ttf>] [--trace] [--window]");
     }
 
     std::optional<uint64_t> max_instructions;
     std::optional<std::filesystem::path> save_root;
     std::optional<std::filesystem::path> shared_font;
+    std::optional<std::filesystem::path> config;
     bool trace = false;
     bool window = false;
     for (size_t index = 1; index < args.size(); ++index) {
@@ -75,7 +77,7 @@ RunnerOptions parse_runner_options(std::span<const std::string_view> args) {
             continue;
         }
         if (flag != "--max-instructions" && flag != "--save-root" &&
-            flag != "--shared-font") {
+            flag != "--shared-font" && flag != "--config") {
             throw std::invalid_argument("unknown runner option");
         }
         if (++index >= args.size()) {
@@ -102,6 +104,12 @@ RunnerOptions parse_runner_options(std::span<const std::string_view> args) {
                     "--save-root must be specified once with a nonempty path");
             }
             save_root = std::filesystem::path{std::string{value}};
+        } else if (flag == "--config") {
+            if (config || value.empty()) {
+                throw std::invalid_argument(
+                    "--config must be specified once with a nonempty path");
+            }
+            config = std::filesystem::path{std::string{value}};
         } else {
             if (shared_font || value.empty()) {
                 throw std::invalid_argument(
@@ -115,8 +123,14 @@ RunnerOptions parse_runner_options(std::span<const std::string_view> args) {
     }
 
     std::filesystem::path input{std::string{args[0]}};
-    return {input, input.parent_path().parent_path(), std::move(save_root),
-            std::move(shared_font), *max_instructions, trace, window};
+    return {input,
+            input.parent_path().parent_path(),
+            std::move(save_root),
+            std::move(shared_font),
+            std::move(config),
+            *max_instructions,
+            trace,
+            window};
 }
 
 std::string format_stop(const nwii::runtime::ExecutionStop& stop) {

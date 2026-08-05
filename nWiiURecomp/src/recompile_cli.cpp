@@ -12,6 +12,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace nwiiu::recomp {
 namespace {
@@ -100,9 +101,23 @@ int run_shader_inspect(std::span<const std::string_view> arguments,
 
 }  // namespace
 
+const analyzer::GameConfig& builtin_profile() {
+    static const analyzer::GameConfig profile = [] {
+        analyzer::GameConfig config;
+        config.project_name = "Wind Waker HD";
+        config.target_prefix_override = "wwhd";
+        config.target = analyzer::kWwhdEuV0;
+        // Mirrors configs/wwhd-eu-v0.toml; nwii::runtime::default_hle_hooks()
+        // is the runtime-side copy of the same table.
+        config.hle_hooks = {{0x0275F480u, "Yaz0Decode"}};
+        return config;
+    }();
+    return profile;
+}
+
 int run_recompile_cli(std::span<const std::string_view> arguments,
-                      const analyzer::Target& target, std::ostream& output,
-                      std::ostream& error) {
+                      const analyzer::GameConfig& fallback,
+                      std::ostream& output, std::ostream& error) {
     // Shader AOT subcommands run before the recompile argument check, which
     // requires exactly two positional arguments.
     if (!arguments.empty() && arguments.front() == "shader-extract") {
@@ -112,8 +127,23 @@ int run_recompile_cli(std::span<const std::string_view> arguments,
         return run_shader_inspect(arguments, output, error);
     }
 
-    if (arguments.size() != 2) {
-        error << "usage: nwiiu-recompile <cking.rpx> <output-directory>\n"
+    std::vector<std::string_view> positional;
+    std::string_view config_path;
+    for (size_t index = 0; index < arguments.size(); ++index) {
+        if (arguments[index] == "--config") {
+            if (++index == arguments.size()) {
+                positional.clear();
+                break;
+            }
+            config_path = arguments[index];
+        } else {
+            positional.push_back(arguments[index]);
+        }
+    }
+
+    if (positional.size() != 2) {
+        error << "usage: nwiiu-recompile [--config <profile.toml>] "
+                 "<game.rpx> <output-directory>\n"
               << "       nwiiu-recompile shader-extract --content <dir> "
                  "--out <file.raw>\n"
               << "       nwiiu-recompile shader-inspect --in <file.raw> "
@@ -122,14 +152,22 @@ int run_recompile_cli(std::span<const std::string_view> arguments,
     }
 
     try {
-        const auto image = analyzer::load_rpx(arguments[0], target);
+        const analyzer::GameConfig config =
+            config_path.empty() ? fallback
+                                : analyzer::load_game_config(config_path);
+        const auto image = analyzer::load_rpx(positional[0], config.target);
         const auto analysis = analyzer::analyze(image);
         const auto summary =
-            generate_native_project(image, analysis, arguments[1]);
+            generate_native_project(image, analysis, positional[1], config);
 
         std::ostringstream text;
         text.imbue(std::locale::classic());
-        text << "RPX: " << image.sha256 << '\n'
+        text << "Title: "
+             << (image.target.name.empty() ? "unidentified" : image.target.name)
+             << '\n'
+             << "RPX: " << image.sha256 << '\n'
+             << "Targets: " << config.target_prefix() << "-native, "
+             << config.target_prefix() << "-module\n"
              << "Blocks: " << summary.block_count << '\n'
              << "Instructions: " << summary.instruction_count << '\n'
              << "Shards: " << summary.shard_count << '\n';

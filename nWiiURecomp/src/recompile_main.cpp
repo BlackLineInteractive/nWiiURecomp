@@ -1,7 +1,5 @@
 #include "nwiiu/recomp/recompile_cli.h"
 
-#include "nwiiu/analyzer/target.h"
-
 #include <cstddef>
 #include <iostream>
 #include <string_view>
@@ -14,5 +12,5 @@ int main(int argc, char** argv) {
         arguments.emplace_back(argv[index]);
     }
     return nwiiu::recomp::run_recompile_cli(
-        arguments, nwiiu::analyzer::resolve_target(), std::cout, std::cerr);
+        arguments, nwiiu::recomp::builtin_profile(), std::cout, std::cerr);
 }

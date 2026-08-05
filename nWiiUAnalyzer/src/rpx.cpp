@@ -7,6 +7,7 @@
 #include <iterator>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 #include <zlib.h>
 
@@ -107,13 +108,17 @@ RpxImage load_rpx(const std::filesystem::path& path, Target target) {
     const uint32_t section_header_offset = reader.be32(32);
     const uint16_t section_count = reader.be16(48);
     const uint16_t string_table_index = reader.be16(50);
+    // A profile without a digest or an entry point authenticates nothing; the
+    // structural checks above and the entry-point-lands-in-code check below
+    // still have to pass, so a corrupt image is rejected either way.
     if (section_count == 0 || string_table_index >= section_count ||
-        hash != target.sha256 || entry_point != target.entry_point) {
+        (target.verifies_hash() && hash != target.sha256) ||
+        (target.pins_entry_point() && entry_point != target.entry_point)) {
         validation_error();
     }
 
     RpxImage image;
-    image.target = target;
+    image.target = std::move(target);
     image.input_size = bytes.size();
     image.sha256 = hash;
     image.entry_point = entry_point;

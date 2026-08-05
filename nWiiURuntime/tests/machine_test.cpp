@@ -677,6 +677,52 @@ void test_machine_patches_wwhd_yaz0_decompressor() {
         "Machine patches the WWHD Yaz0 decompressor with a native decoder");
 }
 
+// The decoder is portable; only the address it sits at is per-game. A profile
+// that names a different address must get the hook there and nowhere else.
+void test_hooks_land_at_the_address_the_profile_names() {
+    auto image = make_image();
+    constexpr uint32_t kDecoder = 0x02001000;
+    constexpr uint32_t kStream = 0x10100000;
+    constexpr uint32_t kOutput = 0x10200000;
+    constexpr std::array<uint8_t, 26> stream{
+        'Y',  'a', 'z', '0', 0,    0,    0,    35,   0,    0,
+        0,    0,   0,   0,   0,    0,    0xE0, 'A',  'B',  'C',
+        0x70, 0x02, 0x00, 0x00, 0x05, 0x00};
+    image.memory.map(kStream, 32, {true, false, false}, stream);
+    image.memory.map(kOutput, 64, {true, true, false});
+    const std::map<uint32_t, std::string> hooks{{kDecoder, "Yaz0Decode"}};
+    Machine machine(image, {}, std::nullopt, std::nullopt, hooks);
+
+    CPUContext cpu;
+    cpu.pc = kDecoder;
+    cpu.lr = kReturnA;
+    cpu.gpr[3] = kOutput;
+    cpu.gpr[4] = kStream;
+    const auto stop = machine.executor().run(cpu, 40);
+    test::require(stop.category == StopCategory::instruction_budget &&
+                      cpu.gpr[3] == 35 &&
+                      image.memory.read8(kOutput, cpu.pc) == 'A',
+                  "a profile hook fires at its own address");
+
+    // And the address the built-in WWHD profile uses is now unhooked.
+    auto bare = make_image();
+    Machine empty(bare, {}, std::nullopt, std::nullopt,
+                  std::map<uint32_t, std::string>{});
+    test::require(!empty.executor().is_patched(0x0275F480u),
+                  "an empty hook table leaves the WWHD address alone");
+}
+
+void test_an_unknown_hook_name_is_rejected_at_construction() {
+    auto image = make_image();
+    const std::map<uint32_t, std::string> hooks{{0x02000000u, "NoSuchHook"}};
+    test::require_throws(
+        [&] {
+            Machine machine(image, {}, std::nullopt, std::nullopt, hooks);
+        },
+        "unknown HLE hook",
+        "a misspelled hook name fails the build, not the boot");
+}
+
 } // namespace
 
 int main() {
@@ -696,4 +742,6 @@ int main() {
     test_machine_binds_owned_filesystem_handlers();
     test_machine_binds_owned_proc_ui_handlers();
     test_machine_patches_wwhd_yaz0_decompressor();
+    test_hooks_land_at_the_address_the_profile_names();
+    test_an_unknown_hook_name_is_rejected_at_construction();
 }

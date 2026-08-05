@@ -6,9 +6,10 @@ recompiler, the runtime, or the Cemu-derived port.
 ## Project Overview
 
 nWiiURecomp statically recompiles Nintendo Wii U executables (`.rpx`/`.rpl`)
-into native code backed by a checked Cafe OS runtime. The only authenticated
+into native code backed by a checked Cafe OS runtime. The only *validated*
 target is *The Legend of Zelda: The Wind Waker HD* EU v0 (`WUP-P-BCZP`, title
-version 0), pinned in `nWiiUAnalyzer/include/nwiiu/analyzer/target.h:15`.
+version 0), but it is no longer compiled in: per-game facts live in `.toml`
+profiles under `configs/`, passed with `--config`. See "Game profiles" below.
 
 Two consumers share one lifter:
 
@@ -59,7 +60,9 @@ leaves `flat_base` null and the callbacks still work.
 | `nWiiUAnalyzer/` | RPX/RPL parse, relocation, function + basic-block recovery, JSON manifest. Namespace `nwiiu::analyzer`. |
 | `nWiiURecomp/` | The lifter (`native_generator.cpp`), project emitter, both CLIs, and the GPU7 shader extractor. Namespace `nwiiu::recomp`. |
 | `nWiiURuntime/` | Guest memory, Espresso interpreter, scheduler, Cafe OS HLE, GX2/Latte/AddrLib, SDL3 renderer. Namespace `nwii::runtime` — note the missing trailing `u`. |
-| `nWiiUStudio/` | Stub. `int main() { return 0; }`, in no CMakeLists. Ignore it. |
+| `configs/` | Per-game profiles. `wwhd-eu-v0.toml` is the pinned target; `generic.toml` authenticates nothing and is the starting point for a new game. |
+| `nWiiUAnalyzer/Ghidra/` | `ExportWiiUProfile.java` — emits a profile plus a `Name,Start,End,Size` symbol CSV from an analysed RPX. |
+| `nWiiUStudio/` | GUI, sources imported from NWiiRecomp. **Does not build**: `StudioState.hpp` includes NWii headers (`loader/loader.h`, `recompiler/recompiler.h`, `toml++`) that do not exist here. Gated behind `-DNWIIU_BUILD_STUDIO=ON`, OFF by default. |
 | `extern/Cemu/` | Vendored submodule, pinned + patched. See the patch workflow below. |
 | `tools/` | Three bash scripts, no Python. |
 | `patches/cemu/` | The entire port as one tracked git diff. |
@@ -71,17 +74,21 @@ Dead code that looks alive: `nWiiURuntime/src/main.cpp` and
 ## Development Commands
 
 ```bash
-# Host libs, CLIs and the 35 unit tests. ~10 s.
+# Host libs, CLIs and the 36 unit tests. ~15 s including the nested-configure test.
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ctest --test-dir build --output-on-failure
 
 # Analyze an RPX into a deterministic manifest. Exit 3 is NORMAL (unresolved
 # control-flow records remain); 2 is a usage error; 0 means none remain.
-./build/nWiiUAnalyzer/nwiiu-analyze /path/to/code/cking.rpx build/wwhd-eu-v0.json
+# Without --config the built-in WWHD profile applies; --any-title drops the gates.
+./build/nWiiUAnalyzer/nwiiu-analyze --config configs/wwhd-eu-v0.toml \
+  /path/to/code/cking.rpx build/wwhd-eu-v0.json
 
 # Headless interpreter-only runner. 0 = guest_exit, 2 = usage, 3 = structured stop.
+# --list-hooks prints every name a profile's [hle_hooks] may use.
 ./build/nWiiURecomp/nwiiu-run /path/to/code/cking.rpx \
+  --config configs/wwhd-eu-v0.toml \
   --max-instructions 50000000 --save-root /tmp/wwhd-recomp-save --trace
 
 # Full windowed port. Argument MUST be absolute and contain code/cking.rpx. ~25 min.
@@ -99,6 +106,36 @@ headers, or to `patches/cemu/` forces a full module rebuild (479k blocks,
 There is no linter and no CI. `-Wall -Wextra -Wpedantic -Werror` on GNU/Clang is
 the gate, applied per target — but **not** to `nWiiUAnalyzer`/`nWiiURuntime`
 test targets, so warnings there will not fail a build.
+
+## Game profiles
+
+Nothing in the tree names a title. A profile (`nwiiu::analyzer::GameConfig`,
+`game_config.h`) carries the target gates, the HLE hook table, and the names the
+generator gives its CMake targets. The format is the one NWiiRecomp uses, read
+by a hand-rolled TOML subset parser in `game_config.cpp` — comments, `[table]`
+headers, `key = value` with basic strings, decimal/`0x` integers and booleans.
+No arrays, no inline tables, and no external dependency.
+
+- **Both gates are optional.** An empty `sha256` authenticates nothing; a zero
+  `entry_point` adopts the image's own. The RPX header checks still apply, so a
+  corrupt image is rejected either way (`rpx.cpp:110-117`).
+- **Hooks are named, not addressed.** `[hle_hooks]` maps a guest address to a
+  routine in `native_hooks.cpp`; the routine is portable, the address is not.
+  An unknown name throws from `Machine`'s constructor — the alternative is a
+  hook that never fires and costs a rebuild to notice.
+- **`target_prefix` names the generated targets.** WWHD pins it to `wwhd`
+  because `tools/build-wwhd-port.sh` and the Cemu patch look for
+  `libwwhd-module.so`. Root `CMakeLists.txt` checks
+  `${NWIIU_GENERATED_PREFIX}-native`, defaulting to `wwhd`.
+- **The generated program never reads the .toml.** `project_generator.cpp`
+  bakes the profile into `main.cpp` (`profile_target()`, `profile_hooks()`) and
+  the title id into `module.cpp`.
+- **Three copies of the WWHD table exist** and must stay in step:
+  `configs/wwhd-eu-v0.toml`, `nwii::runtime::default_hle_hooks()`, and
+  `nwiiu::recomp::builtin_profile()`. The last two are what a `--config`-less
+  invocation gets, which is why behaviour is unchanged without a profile.
+- `.gitignore` ignores `*.toml` with a `!configs/*.toml` exception. A profile
+  written anywhere else is silently untracked.
 
 ## Code Conventions & Common Patterns
 
@@ -190,7 +227,7 @@ test targets, so warnings there will not fail a build.
 
 ## Testing & QA
 
-**No framework.** 35 first-party CTest targets (plus `wwhd_port_test`, which
+**No framework.** 36 first-party CTest targets (plus `wwhd_port_test`, which
 exists only in the port build), all on a hand-rolled harness:
 `test::require(bool, std::string_view)` in `nWiiUAnalyzer/tests/test_support.h:20`
 prints `FAIL: <message>` and `std::exit(1)`. Every test is a plain executable
@@ -218,8 +255,9 @@ Traps:
   is to regenerate the checked-in fixture, never to loosen the assertion. Same
   shape for `manifest_test` against the JSON schema.
 - **`recompile_cli_test` shells out to a full nested CMake configure** of the
-  whole tree. It is by far the slowest test and fails wherever the deps are not
-  discoverable.
+  whole tree, and fails wherever the deps are not discoverable. It used to be
+  unrunnable because that configure pulled Studio's six FetchContent clones;
+  with Studio gated off it is ~7 s.
 - **`shader_corpus_gate_test` self-skips** unless `NWIIU_WWHD_CONTENT` points at
   real game content. A green suite does not mean it ran. No other test needs a
   dump, a GPU, or the network.

@@ -20,6 +20,24 @@ NO_GitHub/
 *.iso
 *.wbfs
 
+# Game dumps and executables. Never commit these — they are the one thing that
+# turns this repo from a toolchain into a distribution of someone's copyright.
+# The list covers a disc image dropped anywhere, not just under NO_GitHub/.
+*.wux
+*.wud
+*.wua
+*.rpx
+*.rpl
+*.app
+*.h3
+*.tik
+*.tmd
+*.key
+
+# Third-party tooling downloaded next to the tree (Ghidra loaders, JWUDTool).
+*.zip
+*.jar
+
 NWii-documentation/
 
 docs/
@@ -39,8 +57,11 @@ CTestTestfile.cmake
 _deps/
 log.txt
 
-# Configuration files
+# Configuration files. Local scratch configs stay untracked, but the per-game
+# profiles under configs/ are the source of truth for what each target is —
+# they have to be committed.
 *.toml
+!configs/*.toml
 *.csv
 *.ini
 *.log

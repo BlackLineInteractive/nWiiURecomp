@@ -30,7 +30,7 @@ nWiiURecomp translates Nintendo Wii U (`.rpx`, `.rpl`) executables into native C
 
 > **Latest Update:** The current milestone authenticates the Wind Waker HD EU v0 executable, maps its sections and relocations, initializes Cafe ABI state, and runs deterministically through cooperative startup. The static recompiler is achieving near-native speeds natively alongside a standalone headless runner or Cemu-derived windowed host.
 > 
-> **Note on Universality:** While currently hardcoded to Wind Waker HD for testing, the codebase is actively being refactored and will eventually be **unified to support all Wii U games** universally using a configuration-driven approach.
+> **Note on Universality:** The target is no longer compiled in. Every per-game fact — which build to authenticate, which routines to serve natively, what the generated project is called — lives in a `.toml` profile under [`configs/`](configs/), passed with `--config`. WWHD remains the one *validated* title; adding another game is a new profile, not a patch to the tree.
 
 ---
 
@@ -38,7 +38,9 @@ nWiiURecomp translates Nintendo Wii U (`.rpx`, `.rpl`) executables into native C
 
 ```
 nWiiURecomp/
+├── configs/         — Per-game profiles (.toml): the only place a title is named
 ├── nWiiUAnalyzer/   — RPX/RPL parser and function boundary analyzer
+│   └── Ghidra/      — ExportWiiUProfile.java: generates a profile + symbol CSV
 ├── nWiiURecomp/     — Offline static recompiler (PPC → C++)
 ├── nWiiURuntime/    — Checked Cafe runtime foundation
 └── nWiiUStudio/     — GUI debugging and inspection tool (Raylib + ImGui)
@@ -86,7 +88,11 @@ nWiiURecomp/
 # Build host libs, CLIs and unit tests.
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
+ctest --test-dir build --output-on-failure
 ```
+
+`nWiiUStudio` is off by default (`-DNWIIU_BUILD_STUDIO=ON` to include it): it
+clones six projects at configure time, so building it needs the network.
 
 ---
 
@@ -94,15 +100,61 @@ cmake --build build -j8
 
 ```bash
 # 1. Analyze an RPX into a deterministic manifest
-./build/nWiiUAnalyzer/nwiiu-analyze /path/to/code/cking.rpx build/wwhd-eu-v0.json
+./build/nWiiUAnalyzer/nwiiu-analyze --config configs/wwhd-eu-v0.toml \
+  /path/to/code/cking.rpx build/wwhd-eu-v0.json
 
 # 2. Headless interpreter-only runner (for validation)
 ./build/nWiiURecomp/nwiiu-run /path/to/code/cking.rpx \
+  --config configs/wwhd-eu-v0.toml \
   --max-instructions 50000000 --save-root /tmp/wwhd-recomp-save --trace
 
-# 3. Full windowed port (uses Cemu)
+# 3. Emit the standalone C++ project
+./build/nWiiURecomp/nwiiu-recompile --config configs/wwhd-eu-v0.toml \
+  /path/to/code/cking.rpx export/wwhd
+
+# 4. Full windowed port (uses Cemu)
 tools/build-wwhd-port.sh /absolute/path/to/WWHD
 ```
+
+Omitting `--config` falls back to the built-in WWHD profile, so every command
+above behaves as it did before profiles existed.
+
+---
+
+## Adding a game
+
+Nothing in the tree names a title. A new game is a new profile.
+
+```bash
+# 1. Start from the permissive profile — it authenticates nothing, so any RPX
+#    that parses is accepted and the entry point comes from the image.
+cp configs/generic.toml configs/my-game.toml
+
+# 2. Learn what you have. The analyzer prints the digest and entry point;
+#    paste them into [target] to pin the build.
+./build/nWiiUAnalyzer/nwiiu-analyze --config configs/my-game.toml \
+  /path/to/code/game.rpx build/my-game.json
+```
+
+For a profile with real function names, run
+[`nWiiUAnalyzer/Ghidra/ExportWiiUProfile.java`](nWiiUAnalyzer/Ghidra/ExportWiiUProfile.java)
+on the RPX in Ghidra (loaded with GhidraRPXLoader). It writes a ready-to-use
+`.toml` — target gates filled from the loaded program — plus a
+`Name,Start,End,Size` symbol CSV, and comments out any native-hook candidate the
+runtime does not yet implement.
+
+### What a profile controls
+
+| key | effect |
+| --- | --- |
+| `project_name` | human-readable title; also the default target prefix |
+| `target_prefix` | names the generated CMake targets (`<prefix>-native`, `<prefix>-module`) |
+| `[target] sha256` | authenticates the exact build. Omit and any RPX is accepted |
+| `[target] entry_point` | pins the entry point. Omit and the image's own is used |
+| `[target] title_id` | reported by the static module to the host |
+| `[hle_hooks]` | guest address → native routine. `nwiiu-run --list-hooks` lists the accepted names |
+
+An unknown hook name fails at startup rather than silently never firing.
 
 Output lands in `build-wwhd-port/package` as `wwhd-recompiled`, `libwwhd-module.so`, and a `game` symlink to the dump.
 

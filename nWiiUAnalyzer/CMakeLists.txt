@@ -1,5 +1,6 @@
 add_library(nwiiu_analyzer STATIC
     src/analysis.cpp
+    src/game_config.cpp
     src/hash.cpp
     src/manifest.cpp
     src/rpx.cpp
@@ -22,6 +23,7 @@ function(add_nwiiu_test name source)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+add_nwiiu_test(game_config_test tests/game_config_test.cpp)
 add_nwiiu_test(hash_test tests/hash_test.cpp)
 add_nwiiu_test(rpx_test tests/rpx_test.cpp)
 add_nwiiu_test(analysis_test tests/analysis_test.cpp)

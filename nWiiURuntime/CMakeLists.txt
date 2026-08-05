@@ -9,7 +9,8 @@ add_library(nwiiu_runtime STATIC src/memory.cpp src/execution_image.cpp
                                   src/cafe_coreinit.cpp
                                   src/cafe_filesystem.cpp src/cafe_olv.cpp
                                   src/cafe_padscore.cpp src/cafe_act.cpp
-                                  src/machine.cpp src/patch_guard.cpp)
+                                  src/machine.cpp src/native_hooks.cpp
+                                  src/patch_guard.cpp)
 set_target_properties(nwiiu_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(nwiiu_runtime PUBLIC include)
 target_link_libraries(nwiiu_runtime PUBLIC nwiiu_analyzer PkgConfig::SHADERC)

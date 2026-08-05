@@ -1,8 +1,10 @@
 #include "nwiiu/recomp/runner_cli.h"
 
+#include "nwiiu/analyzer/game_config.h"
 #include "nwiiu/analyzer/rpx.h"
-#include "nwiiu/analyzer/target.h"
+#include "nwiiu/recomp/recompile_cli.h"
 #include "runtime/machine.h"
+#include "runtime/native_hooks.h"
 
 #include <exception>
 #include <iostream>
@@ -17,12 +19,26 @@ int main(int argc, char** argv) {
             arguments.emplace_back(argv[index]);
         }
 
+        // Answers "what may a profile's [hle_hooks] table name?" without
+        // reading the source. Checked before option parsing because it takes
+        // no RPX.
+        if (!arguments.empty() && arguments.front() == "--list-hooks") {
+            for (const auto name : nwii::runtime::native_hook_names()) {
+                std::cout << name << '\n';
+            }
+            return 0;
+        }
+
         const auto options = nwiiu::recomp::parse_runner_options(arguments);
-        auto rpx = nwiiu::analyzer::load_rpx(
-            options.input, nwiiu::analyzer::resolve_target());
+        const nwiiu::analyzer::GameConfig config =
+            options.config ? nwiiu::analyzer::load_game_config(*options.config)
+                           : nwiiu::recomp::builtin_profile();
+
+        auto rpx = nwiiu::analyzer::load_rpx(options.input, config.target);
         auto image = nwii::runtime::make_execution_image(rpx);
         nwii::runtime::Machine machine(image, options.title_root,
-                                       options.save_root, options.shared_font);
+                                       options.save_root, options.shared_font,
+                                       config.hle_hooks);
         machine.executor().set_trace_enabled(options.trace);
         const auto stop = machine.run(options.max_instructions,
                                       nwii::runtime::kSchedulerQuantum);

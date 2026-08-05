@@ -23,6 +23,52 @@ namespace nwiiu::recomp {
 namespace {
 constexpr size_t kBlocksPerShard = 128;
 
+// Profile strings reach the generated sources as C++ literals. Nothing in a
+// profile is trusted to be identifier-safe, so escape rather than assume.
+std::string cpp_literal(std::string_view value) {
+    std::string text;
+    text.reserve(value.size() + 2);
+    text.push_back('"');
+    for (const char item : value) {
+        if (item == '"' || item == '\\') {
+            text.push_back('\\');
+            text.push_back(item);
+        } else if (item >= 0x20 && item != 0x7F) {
+            text.push_back(item);
+        } else {
+            // Control characters have no business in a profile; drop them
+            // rather than emit an escape that changes the string's length.
+            text.push_back('?');
+        }
+    }
+    text.push_back('"');
+    return text;
+}
+
+// Title ids are written the way the eShop and Cemu write them: 16 hex digits,
+// no prefix. An absent or malformed id becomes 0, which is what the module
+// reported before profiles existed for every title but WWHD.
+uint64_t title_id_value(std::string_view text) {
+    if (text.size() != 16) {
+        return 0;
+    }
+    uint64_t value = 0;
+    for (const char item : text) {
+        uint64_t digit = 0;
+        if (item >= '0' && item <= '9') {
+            digit = static_cast<uint64_t>(item - '0');
+        } else if (item >= 'a' && item <= 'f') {
+            digit = static_cast<uint64_t>(item - 'a' + 10);
+        } else if (item >= 'A' && item <= 'F') {
+            digit = static_cast<uint64_t>(item - 'A' + 10);
+        } else {
+            return 0;
+        }
+        value = (value << 4) | digit;
+    }
+    return value;
+}
+
 struct TranslatedBlock {
     analyzer::BasicBlock block;
     std::string symbol;
@@ -203,8 +249,48 @@ std::string registry_source(std::span<const TranslatedBlock> blocks,
     return output.str();
 }
 
-std::string runner_source() {
-    return R"(#define SDL_MAIN_HANDLED
+// The profile, frozen into the generated runner: the built program carries the
+// gates and hooks it was generated with and never has to find the .toml again.
+std::string profile_source(const analyzer::GameConfig& config) {
+    std::ostringstream output;
+    output << "namespace {\n"
+              "nwiiu::analyzer::Target profile_target() {\n"
+              "    nwiiu::analyzer::Target target;\n"
+              "    target.product_code = "
+           << cpp_literal(config.target.product_code)
+           << ";\n"
+              "    target.title_id = "
+           << cpp_literal(config.target.title_id)
+           << ";\n"
+              "    target.title_version = " << config.target.title_version
+           << "u;\n"
+              "    target.sha256 = "
+           << cpp_literal(config.target.sha256)
+           << ";\n"
+              "    target.entry_point = 0x" << std::uppercase << std::hex
+           << config.target.entry_point << std::dec << std::nouppercase
+           << "u;\n"
+              "    target.name = "
+           << cpp_literal(config.target.name)
+           << ";\n"
+              "    return target;\n"
+              "}\n\n"
+              "std::map<uint32_t, std::string> profile_hooks() {\n"
+              "    return {\n";
+    for (const auto& [address, name] : config.hle_hooks) {
+        output << "        {0x" << std::uppercase << std::hex << address
+               << std::dec << std::nouppercase << "u, " << cpp_literal(name)
+               << "},\n";
+    }
+    output << "    };\n"
+              "}\n"
+              "} // namespace\n\n";
+    return output.str();
+}
+
+std::string runner_source(const analyzer::GameConfig& config) {
+    std::ostringstream output;
+    output << R"(#define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 
 #include "nwiiu/recomp/runner_cli.h"
@@ -218,6 +304,7 @@ std::string runner_source() {
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -226,7 +313,8 @@ std::string runner_source() {
 
 void register_recompiled_blocks(nwii::runtime::Executor& executor);
 
-
+)" << profile_source(config)
+           << R"(
 int main(int argc, char** argv) {
     try {
         std::vector<std::string_view> arguments;
@@ -236,11 +324,11 @@ int main(int argc, char** argv) {
         }
 
         const auto options = nwiiu::recomp::parse_runner_options(arguments);
-        auto rpx = nwiiu::analyzer::load_rpx(
-            options.input, nwiiu::analyzer::resolve_target());
+        auto rpx = nwiiu::analyzer::load_rpx(options.input, profile_target());
         auto image = nwii::runtime::make_execution_image(rpx);
         nwii::runtime::Machine machine(image, options.title_root,
-                                       options.save_root, options.shared_font);
+                                       options.save_root, options.shared_font,
+                                       profile_hooks());
         register_recompiled_blocks(machine.executor());
         machine.executor().set_trace_enabled(options.trace);
 
@@ -287,10 +375,12 @@ int main(int argc, char** argv) {
     }
 }
 )";
+    return output.str();
 }
 
-std::string module_source() {
-    return R"(#include "nwiiu/static_module.h"
+std::string module_source(const analyzer::GameConfig& config) {
+    std::ostringstream output;
+    output << R"(#include "nwiiu/static_module.h"
 
 #include "runtime/cpu_context.h"
 #include "runtime/executor.h"
@@ -405,8 +495,13 @@ uint32_t run(nwiiu_static_cpu_state* cpu,
 constexpr nwiiu_static_module kModule{
     NWIIU_STATIC_MODULE_ABI_VERSION,
     sizeof(nwiiu_static_module),
-    0x0005000010143600ULL,
-    0u,
+)";
+    // The host matches this against the title it loaded, so a profile without
+    // a title id yields 0 and the host's own check decides what that means.
+    output << "    0x" << std::uppercase << std::hex << std::setfill('0')
+           << std::setw(16) << title_id_value(config.target.title_id)
+           << std::dec << std::nouppercase << "ULL,\n";
+    output << R"(    0u,
     0u,
     &run,
 };
@@ -416,33 +511,39 @@ extern "C" const nwiiu_static_module* nwiiu_static_module_v1() {
     return &kModule;
 }
 )";
+    return output.str();
 }
 
-std::string program_cmake_source(size_t shard_count) {
+std::string program_cmake_source(size_t shard_count, const std::string& prefix) {
+    const std::string objects = prefix + "-recompiled";
+    const std::string native = prefix + "-native";
+    const std::string module = prefix + "-module";
     std::ostringstream output;
-    output << "add_library(wwhd-recompiled OBJECT\n"
-              "    ${CMAKE_CURRENT_LIST_DIR}/registry.cpp\n";
+    output << "add_library(" << objects << " OBJECT\n"
+           << "    ${CMAKE_CURRENT_LIST_DIR}/registry.cpp\n";
     for (size_t index = 0; index < shard_count; ++index) {
         output << "    ${CMAKE_CURRENT_LIST_DIR}/" << shard_name(index) << '\n';
     }
     output << ")\n"
-              "set_target_properties(wwhd-recompiled PROPERTIES "
-              "POSITION_INDEPENDENT_CODE ON)\n"
-              "target_link_libraries(wwhd-recompiled PRIVATE nwiiu_recomp)\n"
-              "add_executable(wwhd-native\n"
-              "    ${CMAKE_CURRENT_LIST_DIR}/main.cpp\n"
-              "    $<TARGET_OBJECTS:wwhd-recompiled>\n"
-              ")\n"
-              "find_package(SDL3 3.2 REQUIRED CONFIG)\n"
-              "target_link_libraries(wwhd-native PRIVATE nwiiu_recomp "
-              "SDL3::SDL3)\n"
-              "add_library(wwhd-module SHARED\n"
-              "    ${CMAKE_CURRENT_LIST_DIR}/module.cpp\n"
-              "    $<TARGET_OBJECTS:wwhd-recompiled>\n"
-              ")\n"
-              "set_target_properties(wwhd-module PROPERTIES "
-              "OUTPUT_NAME wwhd-module)\n"
-              "target_link_libraries(wwhd-module PRIVATE nwiiu_recomp)\n";
+           << "set_target_properties(" << objects
+           << " PROPERTIES POSITION_INDEPENDENT_CODE ON)\n"
+           << "target_link_libraries(" << objects
+           << " PRIVATE nwiiu_recomp)\n"
+           << "add_executable(" << native << "\n"
+           << "    ${CMAKE_CURRENT_LIST_DIR}/main.cpp\n"
+           << "    $<TARGET_OBJECTS:" << objects << ">\n"
+           << ")\n"
+           << "find_package(SDL3 3.2 REQUIRED CONFIG)\n"
+           << "target_link_libraries(" << native
+           << " PRIVATE nwiiu_recomp SDL3::SDL3)\n"
+           << "add_library(" << module << " SHARED\n"
+           << "    ${CMAKE_CURRENT_LIST_DIR}/module.cpp\n"
+           << "    $<TARGET_OBJECTS:" << objects << ">\n"
+           << ")\n"
+           << "set_target_properties(" << module << " PROPERTIES OUTPUT_NAME "
+           << module << ")\n"
+           << "target_link_libraries(" << module
+           << " PRIVATE nwiiu_recomp)\n";
     return output.str();
 }
 
@@ -494,10 +595,12 @@ void replace_directory(const std::filesystem::path& temporary,
 
 ProjectSummary generate_native_project(
     const analyzer::RpxImage& image, const analyzer::Analysis& analysis,
-    const std::filesystem::path& output_directory) {
+    const std::filesystem::path& output_directory,
+    const analyzer::GameConfig& config) {
     if (output_directory.empty() || output_directory.filename().empty()) {
         throw std::invalid_argument("output directory must name a directory");
     }
+    const std::string prefix = config.target_prefix();
 
     const auto execution_image = nwii::runtime::make_execution_image(image);
     const auto blocks = ordered_blocks(analysis);
@@ -645,9 +748,10 @@ ProjectSummary generate_native_project(
         files.emplace_back(shard_name(shard), std::move(source));
     }
     files.emplace_back("registry.cpp", registry_source(translated, shard_count));
-    files.emplace_back("main.cpp", runner_source());
-    files.emplace_back("module.cpp", module_source());
-    files.emplace_back("program.cmake", program_cmake_source(shard_count));
+    files.emplace_back("main.cpp", runner_source(config));
+    files.emplace_back("module.cpp", module_source(config));
+    files.emplace_back("program.cmake",
+                       program_cmake_source(shard_count, prefix));
 
     std::filesystem::create_directories(output_directory.parent_path().empty()
                                             ? std::filesystem::path{"."}

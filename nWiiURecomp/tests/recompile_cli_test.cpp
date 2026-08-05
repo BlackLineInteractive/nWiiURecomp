@@ -15,7 +15,8 @@
 
 namespace {
 constexpr std::string_view kUsage =
-    "usage: nwiiu-recompile <cking.rpx> <output-directory>\n"
+    "usage: nwiiu-recompile [--config <profile.toml>] "
+    "<game.rpx> <output-directory>\n"
     "       nwiiu-recompile shader-extract --content <dir> --out <file.raw>\n"
     "       nwiiu-recompile shader-inspect --in <file.raw> [--id <hex>]\n";
 
@@ -71,7 +72,7 @@ int main() {
         std::ostringstream error;
         const std::array<std::string_view, 0> arguments{};
         test::require(nwiiu::recomp::run_recompile_cli(
-                          arguments, nwiiu::analyzer::resolve_target(), out, error) ==
+                          arguments, nwiiu::recomp::builtin_profile(), out, error) ==
                           2,
                       "no arguments returns usage error");
         test::require(out.str().empty(), "no arguments has no stdout");
@@ -85,7 +86,7 @@ int main() {
         const std::array<std::string_view, 3> arguments{
             fixture_argument, protected_output_argument, "extra"};
         test::require(nwiiu::recomp::run_recompile_cli(
-                          arguments, nwiiu::analyzer::resolve_target(), out, error) ==
+                          arguments, nwiiu::recomp::builtin_profile(), out, error) ==
                           2,
                       "extra arguments returns usage error");
         test::require(out.str().empty(), "extra arguments has no stdout");
@@ -103,7 +104,7 @@ int main() {
         const std::array<std::string_view, 2> arguments{
             bad_argument, protected_output_argument};
         test::require(nwiiu::recomp::run_recompile_cli(
-                          arguments, nwiiu::analyzer::resolve_target(), out, error) ==
+                          arguments, nwiiu::recomp::builtin_profile(), out, error) ==
                           2,
                       "malformed RPX returns input error");
         test::require(out.str().empty(), "malformed RPX has no stdout");
@@ -119,7 +120,7 @@ int main() {
         const std::array<std::string_view, 2> arguments{
             fixture_argument, protected_output_argument};
         test::require(nwiiu::recomp::run_recompile_cli(
-                          arguments, nwiiu::analyzer::resolve_target(), out, error) ==
+                          arguments, nwiiu::recomp::builtin_profile(), out, error) ==
                           2,
                       "production target rejects hash-mismatched RPX");
         test::require(out.str().empty(), "hash mismatch has no stdout");
@@ -130,8 +131,13 @@ int main() {
     }
 
     const std::string hash = nwiiu::analyzer::sha256_file(fixture);
-    const nwiiu::analyzer::Target fixture_target{
-        "fixture", "fixture", 0, hash, 0x02000000};
+    // A profile for the synthesized fixture: the same shape a real game gets,
+    // pinned to this build so the loader still authenticates something.
+    nwiiu::analyzer::GameConfig fixture_profile;
+    fixture_profile.project_name = "Fixture";
+    fixture_profile.target_prefix_override = "wwhd";
+    fixture_profile.target = {"fixture", "fixture", 0, hash, 0x02000000,
+                              "fixture title"};
     const auto generated = temp.path() / "generated";
     const std::string generated_argument = generated.string();
     {
@@ -140,12 +146,14 @@ int main() {
         const std::array<std::string_view, 2> arguments{
             fixture_argument, generated_argument};
         test::require(nwiiu::recomp::run_recompile_cli(
-                          arguments, fixture_target, out, error) == 0,
+                          arguments, fixture_profile, out, error) == 0,
                       "valid fixture recompiles");
         test::require(error.str().empty(), "valid fixture has no stderr");
-        test::require(out.str() == "RPX: " + hash +
-                                       "\nBlocks: 6\nInstructions: 6\nShards: 1\n",
-                      "valid fixture deterministic summary");
+        test::require(out.str() ==
+                          "Title: fixture title\nRPX: " + hash +
+                              "\nTargets: wwhd-native, wwhd-module"
+                              "\nBlocks: 6\nInstructions: 6\nShards: 1\n",
+                      "valid fixture deterministic summary: " + out.str());
         test::require(std::filesystem::is_regular_file(generated /
                                                        "program.cmake"),
                       "valid fixture emits project");
